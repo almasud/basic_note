@@ -1,29 +1,38 @@
 import 'package:flutter/cupertino.dart';
 import "package:flutter/material.dart";
+import 'package:basic_note/models/note.dart';
+import 'package:basic_note/utils/database_helper.dart';
+import 'package:intl/intl.dart';
 
 class NoteDetail extends StatefulWidget {
-  String appBarTitle;
+  final String appBarTitle;
+  final Note note;
 
-  NoteDetail(this.appBarTitle);
+  NoteDetail(this.note, this.appBarTitle);
 
   @override
   State<StatefulWidget> createState() {
-    return NoteDetailState(this.appBarTitle);
+    return NoteDetailState(this.note, this.appBarTitle);
   }
 }
 
 class NoteDetailState extends State<NoteDetail> {
-  static var _priorities = ['Low', 'High'];
+  static var _priorities = ['High', 'Low'];
+  DatabaseHelper databaseHelper = DatabaseHelper();
+  String appBarTitle;
+  Note note;
+
   TextEditingController titleController = TextEditingController();
   TextEditingController descriptionController = TextEditingController();
-  String appBarTitle;
 
-  NoteDetailState(this.appBarTitle);
+  NoteDetailState(this.note, this.appBarTitle);
 
   @override
   Widget build(BuildContext context) {
     TextStyle textStyle = Theme.of(context).textTheme.headline6;
-    
+    titleController.text = note.title;
+    descriptionController.text = note.description;
+
     return WillPopScope(
       onWillPop: () {
         // Code executes while user press the back navigation button of the device.
@@ -54,10 +63,11 @@ class NoteDetailState extends State<NoteDetail> {
                     );
                   }).toList(),
                   style: textStyle,
-                  value: _priorities[0],
+                  value: getPriorityAsString(note.priority),
                   onChanged: (valueSelectedByUser) {
                     setState(() {
                       debugPrint('Value selected $valueSelectedByUser');
+                      updatePriorityAsInt(valueSelectedByUser);
                     });
                   },
                 ),
@@ -70,13 +80,11 @@ class NoteDetailState extends State<NoteDetail> {
                   controller: titleController,
                   style: textStyle,
                   onChanged: (value) {
-                    setState(() {
-                      debugPrint('Something changed in Title field');
-                    });
+                    debugPrint('Something changed in Title field');
+                    updateTitle();
                   },
                   decoration: InputDecoration(
                       labelText: 'Title',
-                      labelStyle: textStyle,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(5.0)
                       )
@@ -91,13 +99,11 @@ class NoteDetailState extends State<NoteDetail> {
                   controller: descriptionController,
                   style: textStyle,
                   onChanged: (value) {
-                    setState(() {
-                      debugPrint('Something changed in Description text field');
-                    });
+                    debugPrint('Something changed in Description text field');
+                    updateDescription();
                   },
                   decoration: InputDecoration(
                       labelText: 'Description',
-                      labelStyle: textStyle,
                       border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(5.0)
                       )
@@ -118,6 +124,7 @@ class NoteDetailState extends State<NoteDetail> {
                         onPressed: () {
                           setState(() {
                             debugPrint('Save button clicked');
+                            _save();
                           });
                         },
                       ),
@@ -131,6 +138,7 @@ class NoteDetailState extends State<NoteDetail> {
                         onPressed: () {
                           setState(() {
                             debugPrint('Save delete clicked');
+                            _delete();
                           });
                         },
                       ),
@@ -146,6 +154,90 @@ class NoteDetailState extends State<NoteDetail> {
   }
 
   void moveToLastScreen() {
-    Navigator.pop(context);
+    Navigator.pop(context, true);
+  }
+
+  // Convert the string priority in the form of integer before saving it to Database.
+  void updatePriorityAsInt(String value) {
+    switch (value) {
+      case 'High':
+        note.priority = 1;
+        break;
+      case 'Low':
+        note.priority = 2;
+        break;
+    }
+  }
+
+  // Convert the int priority in the form of stings before display it to the user in dropdown.
+  String getPriorityAsString(int value) {
+    String priority;
+    switch (value) {
+      case 1:
+        priority = _priorities[0];  // High
+        break;
+      case 2:
+        priority = _priorities[1]; // Low
+        break;
+    }
+    return priority;
+  }
+
+  // Update the title of Note Object
+  void updateTitle() {
+    debugPrint("Title: ${titleController.text}");
+    note.title = titleController.text;
+  }
+
+  // Update the description of Note Object
+  void updateDescription() {
+    debugPrint("Description: ${descriptionController.text}");
+    note.description = descriptionController.text;
+  }
+
+  // Save data to database
+  void _save() async {
+    moveToLastScreen();
+
+    int result;
+    note.date = DateFormat.yMMMd().format(DateTime.now());
+    if(note.id != null) {
+      // Update operation
+      result = await databaseHelper.updateNote(note);
+    } else {
+      // Create operation
+      result = await databaseHelper.insertNote(note);
+    }
+
+    if(result != 0) {
+      _showAlertDialog('Status', 'Note saved successfully');
+    } else {
+      _showAlertDialog('Status', 'Problem for saving Note');
+    }
+  }
+
+  // Delete an existing note
+  void _delete() async {
+    moveToLastScreen();
+
+    if(note.id == null) {
+      _showAlertDialog("Status", "No Note was deleted");
+      return;
+    }
+
+    int result = await databaseHelper.deleteNote(note);
+    if(result != 0) {
+      _showAlertDialog('Status', 'Note deleted successfully');
+    } else {
+      _showAlertDialog('Status', 'Error occurred while deleting Note');
+    }
+  }
+
+  void _showAlertDialog(String title, String message) {
+    AlertDialog alertDialog = AlertDialog(
+      title: Text(title),
+      content: Text(message),
+    );
+    showDialog(context: context, builder: (_) => alertDialog);
   }
 }
